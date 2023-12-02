@@ -11,6 +11,12 @@ iptables -A INPUT -p udp --dport 2268 -j NFQUEUE --queue-num 0
 
 # Automatic Multicast Tunnel RFC
 
+AMT RFC
+https://www.rfc-editor.org/rfc/rfc7450.html
+
+DNS related to AMT
+https://www.rfc-editor.org/rfc/rfc8777
+
 ## Discovery definition
 
 https://www.rfc-editor.org/rfc/rfc7450.html#section-5.1.2
