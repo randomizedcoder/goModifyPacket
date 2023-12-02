@@ -144,23 +144,35 @@ func main() {
             newUdpLayer.DstPort = udpPacket.DstPort
         }
 
+        e := newUdpLayer.SetNetworkLayerForChecksum(newIpLayer)
+        if e != nil {
+            panic(e)
+        }
+
         b := p.Packet.ApplicationLayer().Payload()
         // 18.118.31.124
         //[]byte{0x12,0x76,0x1F,0x7C}
-        b[len(b)-1] = 0x12
-        b[len(b)-1] = 0x76
-        b[len(b)-1] = 0x1F
+        b[len(b)-4] = 0x12
+        b[len(b)-3] = 0x76
+        b[len(b)-2] = 0x1F
         b[len(b)-1] = 0x7C
 
-        var options      gopacket.SerializeOptions
+        options := gopacket.SerializeOptions{
+            ComputeChecksums: true,
+            FixLengths: true,
+        }
         buffer := gopacket.NewSerializeBuffer()
-        gopacket.SerializeLayers(
+        errS := gopacket.SerializeLayers(
             buffer,
             options,
             newIpLayer,
             newUdpLayer,
             gopacket.Payload(b),
         )
+        if errS != nil {
+            panic(errS)
+        }
+
 
         if debugLevel > 10 {
             //fmt.Println("old:",hex.EncodeToString(p.Packet.Data()))
