@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/google/gopacket"
@@ -69,7 +69,7 @@ func main() {
 
     nfq, err := netfilter.NewNFQueue(0, 100, netfilter.NF_DEFAULT_PACKET_SIZE)
     if err != nil {
-            fmt.Println(err)
+            log.Println(err)
             os.Exit(1)
     }
     defer nfq.Close()
@@ -80,10 +80,10 @@ func main() {
     for {
         p := <-packets
         if debugLevel > 10 {
-            fmt.Println(p.Packet)
+            log.Println(p.Packet)
         }
         if debugLevel > 10 {
-            fmt.Println("old:",hex.EncodeToString(p.Packet.Data()))
+            log.Println("old:",hex.EncodeToString(p.Packet.Data()))
         }
 
         err := binary.Read(bytes.NewReader(p.Packet.ApplicationLayer().Payload()), binary.LittleEndian, &amt)
@@ -91,12 +91,20 @@ func main() {
             panic(err)
         }
 
+        if debugLevel > 10 {
+            log.Println("app payload:",hex.EncodeToString(p.Packet.ApplicationLayer().Payload()))
+        }
+
         if amt.Type != 0x02 {
+            if debugLevel > 10 {
+                log.Println("Not equal to 0x02, so NOT touching this packet")
+            }
             p.SetVerdict(netfilter.NF_ACCEPT)
+            continue
         }
 
         if debugLevel > 10 {
-            fmt.Println("yay!!!")
+            log.Println("Type 0x02, so updating the relay IP to bypass AWS NAT")
         }
 
         // Here we build a new packet by copying most of the fields, but not all
@@ -111,8 +119,8 @@ func main() {
         ethLayer := p.Packet.Layer(layers.LayerTypeEthernet)
         if ethLayer != nil {
             ethFrame, _ := ethLayer.(*layers.Ethernet)
-            fmt.Println("eth source address:", ethFrame.SrcMAC)
-            fmt.Println("eth destination address:", ethFrame.DstMAC)
+            log.Println("eth source address:", ethFrame.SrcMAC)
+            log.Println("eth destination address:", ethFrame.DstMAC)
             newEthLayer.SrcMAC = ethFrame.SrcMAC
             newEthLayer.DstMAC = ethFrame.DstMAC
             newEthLayer.EthernetType = ethFrame.EthernetType
@@ -123,8 +131,8 @@ func main() {
         ipLayer := p.Packet.Layer(layers.LayerTypeIPv4)
         if ipLayer != nil {
             ipPacket, _ := ipLayer.(*layers.IPv4)
-            fmt.Println("IP source address:", ipPacket.SrcIP)
-            fmt.Println("IP destination address:", ipPacket.DstIP)
+            log.Println("IP source address:", ipPacket.SrcIP)
+            log.Println("IP destination address:", ipPacket.DstIP)
             newIpLayer.Version = ipPacket.Version
             newIpLayer.Id = ipPacket.Id
             newIpLayer.TTL = ipPacket.TTL
@@ -138,8 +146,8 @@ func main() {
         udpLayer := p.Packet.Layer(layers.LayerTypeUDP)
         if ipLayer != nil {
             udpPacket, _ := udpLayer.(*layers.UDP)
-            fmt.Println("source port:", udpPacket.SrcPort)
-            fmt.Println("destination port:", udpPacket.DstPort)
+            log.Println("source port:", udpPacket.SrcPort)
+            log.Println("destination port:", udpPacket.DstPort)
             newUdpLayer.SrcPort = udpPacket.SrcPort
             newUdpLayer.DstPort = udpPacket.DstPort
         }
@@ -161,6 +169,8 @@ func main() {
             ComputeChecksums: true,
             FixLengths: true,
         }
+        // https://pkg.go.dev/github.com/google/gopacket#SerializeBuffer
+        // https://pkg.go.dev/github.com/google/gopacket#hdr-Creating_Packet_Data
         buffer := gopacket.NewSerializeBuffer()
         errS := gopacket.SerializeLayers(
             buffer,
@@ -175,8 +185,8 @@ func main() {
 
 
         if debugLevel > 10 {
-            //fmt.Println("old:",hex.EncodeToString(p.Packet.Data()))
-            fmt.Println("new:",hex.EncodeToString(buffer.Bytes()))
+            //log.Println("old:",hex.EncodeToString(p.Packet.Data()))
+            log.Println("new:",hex.EncodeToString(buffer.Bytes()))
         }
 
         p.SetVerdictWithPacket(netfilter.NF_ACCEPT, buffer.Bytes())
